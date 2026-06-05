@@ -14,7 +14,7 @@ jobs:
     name: fmt + clippy + test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -36,7 +36,7 @@ jobs:
           - x86_64-unknown-linux-musl
           - aarch64-unknown-linux-musl
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@v2
         with:
@@ -48,4 +48,7 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
           file target/${{ matrix.target }}/release/gust
-          file target/${{ matrix.target }}/release/gust | grep -q 'statically linked'
+          # musl builds are static or static-pie; either way `file` reports "static"
+          # and there must be no dynamic interpreter.
+          file target/${{ matrix.target }}/release/gust | grep -qi 'static'
+          ! file target/${{ matrix.target }}/release/gust | grep -qi 'dynamically linked'
