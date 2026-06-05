@@ -6,6 +6,15 @@ use std::time::Duration;
 /// sockets so dead mobile clients are reaped and don't leak fds.
 pub const KEEPALIVE: Duration = Duration::from_secs(180);
 
+/// Keep-alive probe interval after the idle time elapses (Linux). With
+/// [`KEEPALIVE_RETRIES`] this reaps a genuinely dead peer in ~180s + 4×25s ≈ 4.7
+/// min instead of the distro default (~14 min). Live peers answer probes and are
+/// never affected.
+pub const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(25);
+
+/// Number of unanswered keep-alive probes before the connection is dropped (Linux).
+pub const KEEPALIVE_RETRIES: u32 = 4;
+
 /// Timeout for establishing an outbound TCP connection (GOST `DialTimeout`).
 pub const DIAL_TIMEOUT: Duration = Duration::from_secs(5);
 

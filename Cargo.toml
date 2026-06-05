@@ -1,6 +1,6 @@
 [package]
 name = "gust"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 rust-version = "1.80"
 description = "A focused, GOST-v2-compatible TCP/UDP port forwarder with SOCKS5 chaining and an opt-in in-kernel NAT mode."

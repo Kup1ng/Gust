@@ -33,7 +33,16 @@ impl Default for SockOpts {
 }
 
 fn keepalive() -> TcpKeepalive {
-    TcpKeepalive::new().with_time(KEEPALIVE)
+    let k = TcpKeepalive::new().with_time(KEEPALIVE);
+    // Tighten probe interval/count on Linux so a genuinely dead peer is reaped
+    // faster than the distro default. These setters aren't available on all
+    // platforms, so the dev-host (Windows) build keeps just the idle time. Live
+    // peers answer probes and are never affected.
+    #[cfg(target_os = "linux")]
+    let k = k
+        .with_interval(crate::constants::KEEPALIVE_INTERVAL)
+        .with_retries(crate::constants::KEEPALIVE_RETRIES);
+    k
 }
 
 /// Apply keep-alive + tuning to an accepted stream.
