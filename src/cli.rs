@@ -18,6 +18,10 @@ pub struct RawArgs {
     pub nat_cleanup: bool,
     pub buf_size_kb: Option<usize>,
     pub heartbeat_secs: Option<u64>,
+    pub worker_threads: Option<usize>,
+    pub nodelay: Option<bool>,
+    pub so_rcvbuf: Option<usize>,
+    pub so_sndbuf: Option<usize>,
     pub debug: bool,
     pub help: bool,
     pub version: bool,
@@ -93,6 +97,28 @@ pub fn parse_args(args: &[String]) -> Result<ParseOutcome, String> {
                         .map_err(|_| format!("--heartbeat-secs expects an integer (got `{v}`)"))?,
                 );
             }
+            "worker-threads" => {
+                let v = take_value(inline)?;
+                raw.worker_threads = Some(
+                    v.parse::<usize>()
+                        .map_err(|_| format!("--worker-threads expects an integer (got `{v}`)"))?,
+                );
+            }
+            "so-rcvbuf" => {
+                let v = take_value(inline)?;
+                raw.so_rcvbuf = Some(
+                    v.parse::<usize>()
+                        .map_err(|_| format!("--so-rcvbuf expects bytes (got `{v}`)"))?,
+                );
+            }
+            "so-sndbuf" => {
+                let v = take_value(inline)?;
+                raw.so_sndbuf = Some(
+                    v.parse::<usize>()
+                        .map_err(|_| format!("--so-sndbuf expects bytes (got `{v}`)"))?,
+                );
+            }
+            "nodelay" => raw.nodelay = Some(parse_bool(name, inline)?),
             "nat" => raw.nat = parse_bool(name, inline)?,
             "set-ip-forward" => raw.set_ip_forward = parse_bool(name, inline)?,
             "nat-cleanup" => raw.nat_cleanup = parse_bool(name, inline)?,
@@ -145,6 +171,11 @@ pub fn help_text() -> String {
          \n\
          TUNING:\n\
          \x20 --buf-size-kb=N              relay buffer per direction in KiB (default 32)\n\
+         \x20 --worker-threads=N           tokio worker threads (default: per CPU). Set 1\n\
+         \x20                              per process when pinning several to one core.\n\
+         \x20 --nodelay=BOOL               TCP_NODELAY on accepted+dialed sockets (default true)\n\
+         \x20 --so-rcvbuf=BYTES            force SO_RCVBUF (disables autotuning; default: auto)\n\
+         \x20 --so-sndbuf=BYTES            force SO_SNDBUF (disables autotuning; default: auto)\n\
          \x20 --heartbeat-secs=N           heartbeat log interval (default 60)\n\
          \x20 -M=N                         SO_MARK for outbound sockets\n\
          \n\

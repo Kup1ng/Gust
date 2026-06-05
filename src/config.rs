@@ -7,6 +7,7 @@
 use std::time::Duration;
 
 use crate::cli::RawArgs;
+use crate::netopt::SockOpts;
 use crate::node::parse_node;
 
 /// Forwarding transport for a listener.
@@ -69,6 +70,10 @@ pub struct Config {
     pub buf_size: usize,
     pub heartbeat: Duration,
     pub debug: bool,
+    /// Tokio worker thread count. `None` = one per available CPU (affinity-aware).
+    pub worker_threads: Option<usize>,
+    /// Socket tuning for accepted and dialed TCP sockets.
+    pub sock: SockOpts,
 }
 
 const MIN_BUF_KB: usize = 1;
@@ -199,6 +204,17 @@ pub fn build_config(raw: RawArgs) -> Result<Config, String> {
     };
     let heartbeat = Duration::from_secs(raw.heartbeat_secs.unwrap_or(60));
 
+    if let Some(w) = raw.worker_threads {
+        if w == 0 {
+            return Err("--worker-threads must be >= 1".to_string());
+        }
+    }
+    let sock = SockOpts {
+        nodelay: raw.nodelay.unwrap_or(true),
+        rcvbuf: raw.so_rcvbuf,
+        sndbuf: raw.so_sndbuf,
+    };
+
     Ok(Config {
         listeners,
         chain,
@@ -208,6 +224,8 @@ pub fn build_config(raw: RawArgs) -> Result<Config, String> {
         buf_size: buf_kb * 1024,
         heartbeat,
         debug: raw.debug,
+        worker_threads: raw.worker_threads,
+        sock,
     })
 }
 

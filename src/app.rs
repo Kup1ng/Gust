@@ -34,8 +34,9 @@ async fn run_userspace(cfg: Config) -> ExitCode {
     let shutdown = Shutdown::new();
     let ctx = Arc::new(Context {
         buf_size: cfg.buf_size,
-        dialer: Dialer::new(cfg.chain.clone(), cfg.mark),
+        dialer: Dialer::new(cfg.chain.clone(), cfg.mark, cfg.sock),
         mark: cfg.mark,
+        sock: cfg.sock,
     });
 
     let mut registry = Registry::default();

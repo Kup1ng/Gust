@@ -77,7 +77,7 @@ async fn handle_conn(
     ctx: &Context,
     target: &str,
 ) -> io::Result<()> {
-    tune_accepted(&client)?;
+    tune_accepted(&client, ctx.sock)?;
     let mut backend = ctx
         .dialer
         .connect(target)

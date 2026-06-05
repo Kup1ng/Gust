@@ -118,8 +118,12 @@ fn lookup(sessions: &SessionMap, peer: &SocketAddr) -> Option<(Arc<UdpSocket>, A
         .map(|s| (s.out.clone(), s.last_activity.clone()))
 }
 
-/// Create an outbound UDP socket connected to `target`.
+/// Create an outbound UDP socket connected to `target`. Skips DNS (and its
+/// `spawn_blocking`) when `target` is already an `IP:port` literal.
 async fn new_session(target: &str, mark: Option<u32>) -> io::Result<Arc<UdpSocket>> {
+    if let Ok(sa) = target.parse::<SocketAddr>() {
+        return Ok(Arc::new(bind_connected(sa, mark)?));
+    }
     let mut last_err: Option<io::Error> = None;
     for sa in tokio::net::lookup_host(target).await? {
         match bind_connected(sa, mark) {

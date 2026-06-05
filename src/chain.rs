@@ -10,15 +10,20 @@ use tokio::net::TcpStream;
 
 use crate::config::ChainHop;
 use crate::constants::{DIAL_TIMEOUT, HANDSHAKE_TIMEOUT};
-use crate::netopt::{dial_tcp, split_host_port};
+use crate::netopt::{dial_tcp, split_host_port, SockOpts};
 use crate::socks5;
 
 /// Dial `target` (`host:port`) through `hops`. `hops` must be non-empty.
-pub async fn dial(hops: &[ChainHop], target: &str, mark: Option<u32>) -> io::Result<TcpStream> {
+pub async fn dial(
+    hops: &[ChainHop],
+    target: &str,
+    mark: Option<u32>,
+    sock: SockOpts,
+) -> io::Result<TcpStream> {
     debug_assert!(!hops.is_empty());
 
     // TCP-connect to the first hop directly.
-    let mut stream = dial_tcp(&hops[0].addr, DIAL_TIMEOUT, mark).await?;
+    let mut stream = dial_tcp(&hops[0].addr, DIAL_TIMEOUT, mark, sock).await?;
 
     // For each hop, negotiate over the current stream and CONNECT to the next
     // address in the chain (the following hop, or the final target).

@@ -44,10 +44,15 @@ fn main() -> ExitCode {
         }
     };
 
-    let rt = match tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-    {
+    let mut builder = tokio::runtime::Builder::new_multi_thread();
+    builder.enable_all();
+    if let Some(n) = cfg.worker_threads {
+        // Explicit cap so several processes pinned to one core don't each spawn
+        // one worker per machine CPU. Also bound the blocking pool accordingly.
+        builder.worker_threads(n);
+        builder.max_blocking_threads((n * 2).max(2));
+    }
+    let rt = match builder.build() {
         Ok(rt) => rt,
         Err(e) => {
             eprintln!("gust: failed to start runtime: {e}");

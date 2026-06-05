@@ -1,5 +1,5 @@
-//! Socket option helpers: keep-alive + nodelay tuning and a timeout-aware,
-//! mark-aware TCP dialer built on `socket2`.
+//! Socket option helpers: keep-alive / nodelay / buffer tuning and a
+//! timeout-aware, mark-aware TCP dialer built on `socket2`.
 
 use std::io::{self, ErrorKind};
 use std::net::SocketAddr;
@@ -10,25 +10,63 @@ use tokio::net::TcpStream;
 
 use crate::constants::KEEPALIVE;
 
+/// Per-socket tuning applied to accepted and dialed TCP sockets. Exposed as CLI
+/// knobs so single-stream throughput behavior can be measured against GOST.
+#[derive(Debug, Clone, Copy)]
+pub struct SockOpts {
+    /// Set TCP_NODELAY (disable Nagle). GOST leaves this off by default.
+    pub nodelay: bool,
+    /// Explicit SO_RCVBUF in bytes. `None` keeps kernel autotuning (recommended).
+    pub rcvbuf: Option<usize>,
+    /// Explicit SO_SNDBUF in bytes. `None` keeps kernel autotuning (recommended).
+    pub sndbuf: Option<usize>,
+}
+
+impl Default for SockOpts {
+    fn default() -> Self {
+        Self {
+            nodelay: true,
+            rcvbuf: None,
+            sndbuf: None,
+        }
+    }
+}
+
 fn keepalive() -> TcpKeepalive {
     TcpKeepalive::new().with_time(KEEPALIVE)
 }
 
-/// Apply TCP_NODELAY and SO_KEEPALIVE to an accepted stream.
-pub fn tune_accepted(stream: &TcpStream) -> io::Result<()> {
-    stream.set_nodelay(true)?;
+/// Apply keep-alive + tuning to an accepted stream.
+pub fn tune_accepted(stream: &TcpStream, opts: SockOpts) -> io::Result<()> {
+    if opts.nodelay {
+        stream.set_nodelay(true)?;
+    }
     let sref = SockRef::from(stream);
     sref.set_tcp_keepalive(&keepalive())?;
+    if let Some(n) = opts.rcvbuf {
+        sref.set_recv_buffer_size(n)?;
+    }
+    if let Some(n) = opts.sndbuf {
+        sref.set_send_buffer_size(n)?;
+    }
     Ok(())
 }
 
-/// Connect to `addr` (`host:port`, DNS-resolved) within `timeout`, applying
-/// nodelay + keepalive and, on Linux, an optional `SO_MARK`.
-pub async fn dial_tcp(addr: &str, timeout: Duration, mark: Option<u32>) -> io::Result<TcpStream> {
+/// Connect to `addr` within `timeout`. Skips DNS (and the `spawn_blocking`
+/// getaddrinfo it implies) when `addr` is already an `IP:port` literal — the
+/// common forwarding case, important when many processes share one core.
+pub async fn dial_tcp(
+    addr: &str,
+    timeout: Duration,
+    mark: Option<u32>,
+    opts: SockOpts,
+) -> io::Result<TcpStream> {
+    if let Ok(sa) = addr.parse::<SocketAddr>() {
+        return dial_one(sa, timeout, mark, opts).await;
+    }
     let mut last_err: Option<io::Error> = None;
-    let resolved = tokio::net::lookup_host(addr).await?;
-    for sa in resolved {
-        match dial_one(sa, timeout, mark).await {
+    for sa in tokio::net::lookup_host(addr).await? {
+        match dial_one(sa, timeout, mark, opts).await {
             Ok(s) => return Ok(s),
             Err(e) => last_err = Some(e),
         }
@@ -36,11 +74,25 @@ pub async fn dial_tcp(addr: &str, timeout: Duration, mark: Option<u32>) -> io::R
     Err(last_err.unwrap_or_else(|| io::Error::other(format!("could not resolve `{addr}`"))))
 }
 
-async fn dial_one(sa: SocketAddr, timeout: Duration, mark: Option<u32>) -> io::Result<TcpStream> {
+async fn dial_one(
+    sa: SocketAddr,
+    timeout: Duration,
+    mark: Option<u32>,
+    opts: SockOpts,
+) -> io::Result<TcpStream> {
     let sock = Socket::new(Domain::for_address(sa), Type::STREAM, Some(Protocol::TCP))?;
     sock.set_nonblocking(true)?;
-    sock.set_nodelay(true)?;
     sock.set_tcp_keepalive(&keepalive())?;
+    if opts.nodelay {
+        sock.set_nodelay(true)?;
+    }
+    // Buffer sizes are set BEFORE connect so window-scale negotiation sees them.
+    if let Some(n) = opts.rcvbuf {
+        sock.set_recv_buffer_size(n)?;
+    }
+    if let Some(n) = opts.sndbuf {
+        sock.set_send_buffer_size(n)?;
+    }
     #[cfg(target_os = "linux")]
     if let Some(m) = mark {
         sock.set_mark(m)?;

@@ -9,6 +9,7 @@ use tokio::sync::watch;
 
 use crate::config::ChainHop;
 use crate::constants::DIAL_TIMEOUT;
+use crate::netopt::SockOpts;
 use crate::{chain, netopt};
 
 /// A cheaply-clonable shutdown broadcast. Backed by a `watch` channel so late
@@ -58,18 +59,19 @@ impl Shutdown {
 pub struct Dialer {
     chain: Vec<ChainHop>,
     mark: Option<u32>,
+    sock: SockOpts,
 }
 
 impl Dialer {
-    pub fn new(chain: Vec<ChainHop>, mark: Option<u32>) -> Self {
-        Self { chain, mark }
+    pub fn new(chain: Vec<ChainHop>, mark: Option<u32>, sock: SockOpts) -> Self {
+        Self { chain, mark, sock }
     }
 
     pub async fn connect(&self, target: &str) -> io::Result<TcpStream> {
         if self.chain.is_empty() {
-            netopt::dial_tcp(target, DIAL_TIMEOUT, self.mark).await
+            netopt::dial_tcp(target, DIAL_TIMEOUT, self.mark, self.sock).await
         } else {
-            chain::dial(&self.chain, target, self.mark).await
+            chain::dial(&self.chain, target, self.mark, self.sock).await
         }
     }
 }
@@ -81,4 +83,6 @@ pub struct Context {
     /// `SO_MARK` for outbound sockets (UDP sessions; TCP dials carry it via the
     /// dialer). `None` unless `-M` was given.
     pub mark: Option<u32>,
+    /// Socket tuning applied to accepted sockets (and dialed, via the dialer).
+    pub sock: SockOpts,
 }

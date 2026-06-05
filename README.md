@@ -54,9 +54,23 @@ sudo gust --nat-cleanup
 | `--set-ip-forward`   | set `net.ipv4.ip_forward=1` at start, restore on exit        |
 | `--nat-cleanup`      | remove Gust's nftables table and exit                        |
 | `--buf-size-kb=N`    | relay buffer per direction in KiB (default 32)               |
+| `--worker-threads=N` | tokio worker threads (default: one per CPU, affinity-aware)  |
+| `--nodelay=BOOL`     | TCP_NODELAY on accepted+dialed sockets (default true)        |
+| `--so-rcvbuf=BYTES`  | force `SO_RCVBUF` (disables autotuning; default: auto)       |
+| `--so-sndbuf=BYTES`  | force `SO_SNDBUF` (disables autotuning; default: auto)       |
 | `--heartbeat-secs=N` | heartbeat log interval (default 60)                          |
 | `-M=N`               | `SO_MARK` for outbound sockets                               |
 | `-D, --debug`        | verbose logging                                              |
+
+### Running several instances on one CPU core
+
+tokio sizes its worker pool from the process's CPU affinity, but to be safe when
+pinning multiple `gust` processes to the **same** core (e.g. with `taskset`),
+pass `--worker-threads=1` to each so they don't each spawn one worker per machine
+CPU and oversubscribe the core. Nothing else in Gust spawns a fixed large thread
+pool: one background logging thread per process, no per-connection threads (tasks
+only), and the blocking pool is lazy and capped to `2×worker-threads`. IP-literal
+targets skip DNS entirely (no `getaddrinfo` blocking threads).
 
 `SIGUSR1` dumps per-tunnel status (userspace: accepted/active/restarts; NAT:
 packets/bytes from nftables counters). `SIGINT`/`SIGTERM` shut down gracefully

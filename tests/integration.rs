@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gust::config::{ListenerSpec, Protocol};
+use gust::netopt::SockOpts;
 use gust::runtime::{Context, Dialer, Shutdown};
 use gust::stats::ListenerStats;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -34,8 +35,9 @@ async fn connect_retry(port: u16) -> TcpStream {
 fn ctx() -> Arc<Context> {
     Arc::new(Context {
         buf_size: 32 * 1024,
-        dialer: Dialer::new(vec![], None),
+        dialer: Dialer::new(vec![], None, SockOpts::default()),
         mark: None,
+        sock: SockOpts::default(),
     })
 }
 
