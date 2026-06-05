@@ -1,0 +1,49 @@
+[package]
+name = "gust"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+description = "A focused, GOST-v2-compatible TCP/UDP port forwarder with SOCKS5 chaining and an opt-in in-kernel NAT mode."
+license = "MIT"
+repository = "https://github.com/Kup1ng/Gust"
+readme = "README.md"
+default-run = "gust"
+
+[[bin]]
+name = "gust"
+path = "src/main.rs"
+
+[features]
+default = ["mimalloc"]
+# mimalloc is optional so that `cargo check --no-default-features` works without
+# a cross C toolchain on non-Linux dev hosts. CI builds with it enabled.
+mimalloc = ["dep:mimalloc"]
+
+[dependencies]
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "net",
+    "io-util",
+    "macros",
+    "signal",
+    "time",
+    "sync",
+] }
+socket2 = { version = "0.5", features = ["all"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"
+mimalloc = { version = "0.1", default-features = false, optional = true }
+
+[profile.release]
+panic = "unwind"     # REQUIRED: isolate panics so one connection/listener can never abort the process
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+strip = true
+
+[profile.dev]
+panic = "unwind"

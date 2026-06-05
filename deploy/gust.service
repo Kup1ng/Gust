@@ -1,0 +1,48 @@
+# Example systemd unit for Gust. Copy to /etc/systemd/system/gust.service,
+# edit ExecStart for your forwards, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now gust
+#
+# Two modes are shown below. Use ONE ExecStart block.
+
+[Unit]
+Description=Gust TCP/UDP forwarder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=2
+
+# Required for hundreds of thousands of userspace connections (2 fds each).
+LimitNOFILE=1048576
+
+# ---- Userspace mode (default) -------------------------------------------
+ExecStart=/usr/local/bin/gust \
+    -L=tcp://:8080/1.2.3.4:9090 \
+    -L=udp://:5300/8.8.8.8:53
+#   Add SOCKS5 chaining with one or more -F:
+#       -F=socks5://user:pass@hop1:1080
+
+# ---- NAT mode (in-kernel DNAT) ------------------------------------------
+# Comment the userspace ExecStart above and use this instead. NAT mode is
+# global (every -L becomes kernel DNAT) and is incompatible with -F.
+#
+# ExecStart=/usr/local/bin/gust --nat \
+#     -L=tcp://:8080/1.2.3.4:443 \
+#     -L=udp://:5300/1.2.3.4:53
+#
+# NAT mode needs CAP_NET_ADMIN and the nft binary. The ExecStartPre/StopPost
+# lines are the orphan-rule backstop (the leading '-' ignores "not found").
+# Do NOT add a seccomp/RestrictAddressFamilies filter that blocks AF_NETLINK.
+#
+# AmbientCapabilities=CAP_NET_ADMIN
+# CapabilityBoundingSet=CAP_NET_ADMIN
+# NoNewPrivileges=true
+# ExecStartPre=-/usr/sbin/nft delete table ip gust
+# ExecStartPre=-/usr/sbin/nft delete table ip6 gust
+# ExecStopPost=-/usr/sbin/nft delete table ip gust
+# ExecStopPost=-/usr/sbin/nft delete table ip6 gust
+
+[Install]
+WantedBy=multi-user.target
