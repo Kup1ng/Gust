@@ -158,3 +158,36 @@ async fn udp_forward_roundtrip() {
     shutdown.trigger();
     let _ = tokio::time::timeout(Duration::from_secs(2), serve).await;
 }
+
+async fn tcp_pair() -> (TcpStream, TcpStream) {
+    let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = l.local_addr().unwrap();
+    let (c, s) = tokio::join!(TcpStream::connect(addr), async {
+        l.accept().await.unwrap().0
+    });
+    (c.unwrap(), s)
+}
+
+// The relay must close the whole connection as soon as ONE direction finishes
+// (GOST semantics), not wait for both halves. With copy_bidirectional this would
+// hang until keepalive, accumulating buffers/fds and growing RSS over time.
+#[tokio::test]
+async fn relay_closes_on_first_finish() {
+    let (mut a, a_peer) = tcp_pair().await;
+    let (mut b, b_peer) = tcp_pair().await;
+
+    let relay =
+        tokio::spawn(async move { gust::relay::transport(&mut a, &mut b, 64 * 1024).await });
+
+    // Backend closes its side -> b gets FIN -> one direction EOFs. a_peer stays
+    // open and never sends FIN; copy_bidirectional would hang waiting for it.
+    drop(b_peer);
+
+    let res = tokio::time::timeout(Duration::from_secs(3), relay).await;
+    assert!(
+        res.is_ok(),
+        "relay did not return after one side closed (would hang with copy_bidirectional)"
+    );
+
+    drop(a_peer); // kept alive until here to prove transport didn't need its FIN
+}
